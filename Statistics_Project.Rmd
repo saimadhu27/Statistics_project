@@ -1,0 +1,237 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r}
+#Importing necessary libraries
+library(ggplot2)
+library(dplyr)
+```
+
+
+```{r}
+#Loading the dataset
+mkt <- read.csv('marketing_campaign.csv',sep = ';')
+head(mkt)
+```
+
+```{r}
+#colnames
+names(mkt)
+```
+
+```{r}
+#Basic descriptive statistics 
+summary(mkt)
+```
+```{r}
+#Check for missing values
+colSums(is.na(mkt))
+```
+The income column has 24 missing values. Let's fill it with it's median value.
+
+
+```{r}
+mkt$Income[is.na(mkt$Income)] <- median(mkt$Income, na.rm=TRUE)
+```
+
+As Z_CostContact and Z_Revenue has same unique value, lets drop those columns first.
+```{r}
+mkt <- subset(mkt,select=-c(Z_CostContact,Z_Revenue,ID))
+```
+
+
+**Part1:**
+Let's assume we are working with "Reliance" retail store data set.Reliance wants to see if they want to spend more money on advertising about their app towards a particular category of customers based on Education. To get an insight about this let's perform a hypothesis test on Education and NumWebPurchases variables.\
+
+
+Let's see what different categories we have within the Education column.
+```{r}
+table(mkt$Education)
+```
+
+```{r}
+ggplot(mkt,aes(x=Education))+geom_bar()
+```
+
+```{r}
+ggplot(mkt,aes(x=NumWebPurchases))+geom_histogram(aes(color = Education,fill=Education),bins=30,alpha=0.4)
+```
+Stating our hypothesis:
+
+H0: Mean of number of online orders placed by different groups of Education is same.\
+H1: Atleast one of the mean differs.\
+
+We will perform an ANOVA on this to see if the mean number of online orders differ significantly.
+
+```{r}
+#First Hypothesis Test
+anova(aov(NumWebPurchases ~ Education,data=mkt))
+```
+As, we can see the p value is less than 0.05 so we reject the null hypothesis.
+
+Let's test the assumptions of ANOVA:
+
+1.Independence: We need our populations to be independent from one another, our data set has records of different customers and all the populations of different groups and samples and independent.\
+
+2.Homogeneity of Variance: The variances of the groups should be equal, meaning that the spread or dispersion of the data in each group should be similar.We can check this using Levene's test.\
+
+
+```{r}
+library(car)
+leveneTest(NumWebPurchases~Education, data = mkt)
+```
+The p value for Levene's test is less than 0.05 which means that the assumption of equal variances is violated.
+
+3.Normality: We check for normality in each population.
+
+```{r}
+par(mfrow = c(2,3))
+hist(mkt$NumWebPurchases[mkt$Education == '2n Cycle'],freq=F, main = "Histogram of 2n Cycle", xlab = "2n Cycle")
+lines(density(mkt$NumWebPurchases[mkt$Education == "2n Cycle"]))
+hist(mkt$NumWebPurchases[mkt$Education == 'Basic'],freq=F, main = "Histogram of Basic", xlab = "Basic")
+lines(density(mkt$NumWebPurchases[mkt$Education == "Basic"]))
+hist(mkt$NumWebPurchases[mkt$Education == 'Graduation'],freq=F, main = "Histogram of Graduation", xlab = "Graduation")
+lines(density(mkt$NumWebPurchases[mkt$Education == "Graduation"]))
+hist(mkt$NumWebPurchases[mkt$Education == 'Master'],freq=F, main = "Histogram of Master", xlab = "Master")
+lines(density(mkt$NumWebPurchases[mkt$Education == "Master"]))
+hist(mkt$NumWebPurchases[mkt$Education == 'PhD'],freq=F, main = "Histogram of PhD", xlab = "PhD")
+lines(density(mkt$NumWebPurchases[mkt$Education == "PhD"]))
+
+```
+From examining the histograms we can see that all of the groups are right skewed\
+Let's examine the normality using Shapiro's Wilk test.\
+
+```{r}
+tapply( mkt$NumWebPurchases, mkt$Education, shapiro.test)
+
+```
+From Shapiro Wilk's normality test, we can observe that for all groups the p values is less than 0.05, which means that the assumption of normality is violated.
+
+Since 2 of the assumptions are violated let's try using a non-parametric test called Kruskal Wallis test.
+
+```{r}
+kruskal.test(NumWebPurchases~Education, data=mkt)
+```
+As, the p value of Kruskal-Wallis test is less than 0.05, we reject the null hypothesis and conclude that the mean of number of online orders differ significantly within the groups of Education.
+
+
+
+**Part1b:** Reliance has a special section for Gold Products. Mr Ryan, the product manager of Reliance Gold Products wants to understand his customers better to segment the customers based on the data. So, he has reached out to the analyst with the sales data we have.
+
+Based on the research, it is known that the people who have high income spend more on Gold Products. Let's test this hypothesis:
+
+H0: There is no significant difference between amount spent on gold products between high income and low income customers.\
+H1: The mean amount spent on gold products is higher for high income groups than low income groups.\
+
+Let's split the Income column into two categories based on the median.
+
+```{r}
+median(mkt$Income)
+```
+```{r}
+high_income <- subset(mkt, mkt$Income>=51381.5)
+low_income <- subset(mkt,mkt$Income<51381.5)
+```
+
+I want to use a two sample t test to check the difference between mean of 2 groups. Let's check the assumptions of t test.
+
+Checking the assumption of normality:
+
+```{r}
+qqnorm(high_income$MntGoldProds)
+qqline(high_income$MntGoldProds)
+```
+
+```{r}
+qqnorm(low_income$MntGoldProds)
+qqline(low_income$MntGoldProds)
+```
+Both the qqplots deviate from the line at the end, so we can say that they don't follow a normal distribution.
+Checking the normality with a Shapiro-Wilk normality test:
+```{r}
+shapiro.test(x=high_income$MntGoldProds)
+```
+
+```{r}
+shapiro.test(x=low_income$MntGoldProds)
+```
+The p value is less than 0.05 in both cases, so we can conclude that the groups don't follow a normal distribution. 
+
+As the normality assumption is violated we can't use a t test for this. Instead, we use a non parametric t test called Wilcoxon rank sum test.
+```{r}
+wilcox.test(high_income$MntGoldProds, low_income$MntGoldProds, alternative='greater')
+```
+As, the p value is less than 0.05, we reject the null hypothesis and conclude that higher income group spend more on Gold Products than the lower income group.
+
+
+# Second hypothesis test:
+**Part2:** The marketing team of Reliance also wants to know if the families with more number of Children have bought more sweet products in the past year.  Let's make a new variable called Children to sum up both kids and teens. If we categorize the Amount of sweet products into two categories by mean by calling Amount of Sweet below average to be "less" and above average to be "more". Let us create a variable called 'sweet.cat'. We see the mean amount of sweet products is 27.06.\
+
+```{r}
+mean(mkt$MntSweetProducts)
+max(mkt$MntSweetProducts)
+```
+
+
+```{r}
+mkt$sweet.cat <-  cut(mkt$MntSweetProducts, c(0, 27.06, 263 ), c("Less","More")) #Cut function
+table(mkt$sweet.cat)
+mkt$Children <- mkt$Kidhome + mkt$Teenhome
+mkt$Children <- as.factor(mkt$Children)
+```
+Hypothesis:\
+
+H0: The amount of sweet products a customer buys and the number of children he/she has are independent.\
+H1: The amount of sweet products a customer buys and the number of children he/she has is dependent.\
+
+We can use a Chi-square test of independence to see if these two variables are dependent.\
+
+Testing Assumptions to perform a chi-square test of Independence are: All assumptions are met.\
+-Each of the expect values should be greater than or equal to 5 \
+-Both variables have atleast two categories.\
+-The samples must be independent.\
+
+```{r}
+tab <- table(mkt$sweet.cat,mkt$Children)
+tab # a customer can have 0,1,2,3 children and can purchase less More.
+chisq.test(tab)$exp
+
+```
+
+```{r}
+chisq.test(tab, correct = F)
+```
+The Chi-Squared test has given a p value less than 0.05, which means we reject the null hypothesis and conclude that there is a relationship between number of children each customer has and Amount of sweet people buys at Reliance.
+
+
+# THIRD HYPOTHESIS TEST
+
+**Part3:** A manager at Reliance claims that they should consider the number of kids a customer has and his education status before they market their wines to people. To test if this claim is true , we Consider predictors KidHome and Education as two predictors for MntWines.Let us try to fit a multiple linear regression equation.\
+
+H0: The number of kids the customer has and their Education status have no significant impact on the amount they spend on wines.\
+H1: The number of kids the customer has and their Education status have a significant impact on the amount they spend on wines.\
+
+
+```{r}
+lm <- lm(mkt$MntWines~mkt$Kidhome+mkt$Income)
+summary(lm)
+```
+By performing the multiple linear regression, we got the p value to be less than 0.05, which means we reject the null hypothesis and conclude that the number of kids and the level of Education the customer has will impact the amount of wines they purchase.
+
+
+Let us use certain predictors to predict the amount of wines sold.
+```{r}
+lm1 <- lm( MntWines ~ Income + NumWebPurchases + NumCatalogPurchases + NumStorePurchases + NumWebVisitsMonth + Education + Kidhome + MntMeatProducts , data = mkt)
+summary(lm1) 
+```
+The p value is less than 0.05, indicating that all the variables have a significant impact on the amount of wines purchased.
+
+
+
+
+
+
+
+
